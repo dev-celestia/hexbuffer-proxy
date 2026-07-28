@@ -165,11 +165,8 @@ Creates a CA with key/certificate files persisted under the default `"cert/"` di
 ##### `pub fn new_in(dir: impl Into<PathBuf>) -> Self`
 Creates a CA with key/certificate files persisted under the specified custom directory.
 
-##### `pub fn save_ca_to_pem(&self, check_path: &str) -> std::io::Result<()>`
-Exports the CA certificate to disk in PEM format (using standard 64-character line wrapping).
-
-##### `pub fn save_key_to_pem(&self, check_path: &str) -> std::io::Result<()>`
-Exports the CA private key to disk in PEM format.
+##### `pub fn ca_cert_pem(&self) -> &str`
+Returns a reference to the CA certificate in PEM format.
 
 ##### `pub fn forge_certificate(&self, host: &str) -> (Vec<u8>, Vec<u8>)`
 Generates (or retrieves from the internal read/write locked cache) a forged DER-encoded TLS certificate and private key for the given hostname. Returns `(cert_der, key_der)`.

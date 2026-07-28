@@ -295,7 +295,6 @@ impl HttpHandler for DecodeHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write as _;
 
     use bytes::Bytes;
 
