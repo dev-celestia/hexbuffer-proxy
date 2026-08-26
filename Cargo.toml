@@ -1,6 +1,6 @@
 [package]
 name = "hexbuffer-proxy"
-version = "0.0.2"
+version = "1.0.0"
 edition = "2024"
 description = "A high-performance HTTPS MITM (Man-in-the-Middle) proxy written in Rust"
 license = "MIT"
