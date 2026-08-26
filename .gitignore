@@ -1,3 +1,7 @@
 /target
 cert/
 /reference
+.DS_Store
+*.pem
+.env
+.env.*

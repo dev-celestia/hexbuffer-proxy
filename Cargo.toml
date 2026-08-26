@@ -2,6 +2,13 @@
 name = "hexbuffer-proxy"
 version = "0.0.2"
 edition = "2024"
+description = "A high-performance HTTPS MITM (Man-in-the-Middle) proxy written in Rust"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/arhamymr/hexbuffer-proxy"
+homepage = "https://github.com/arhamymr/hexbuffer-proxy"
+keywords = ["proxy", "mitm", "https", "tls", "http"]
+categories = ["network-programming", "development-tools::profiling"]
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }

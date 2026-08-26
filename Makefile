@@ -1,4 +1,4 @@
-.PHONY: run build release check clean watch fmt lint test kill-port
+.PHONY: run build release check clean watch fmt lint test kill-port publish publish-dry
 
 PORT := 8080
 
@@ -25,3 +25,10 @@ watch: kill-port
 
 test:
 	cargo test
+
+publish:
+	@./scripts/publish.sh
+
+publish-dry:
+	@./scripts/publish.sh --dry-run
+
