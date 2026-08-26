@@ -1,9 +1,26 @@
 # hexbuffer-proxy
 
+[![Crates.io](https://img.shields.io/crates/v/hexbuffer-proxy.svg)](https://crates.io/crates/hexbuffer-proxy)
+[![Docs.rs](https://docs.rs/hexbuffer-proxy/badge.svg)](https://docs.rs/hexbuffer-proxy)
 [![Rust](https://img.shields.io/badge/rust-2024_edition-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 An HTTPS MITM (Man-in-the-Middle) proxy written in Rust. It intercepts encrypted HTTPS traffic by dynamically generating TLS certificates for target domains, allowing inspection and modification of request/response data.
+
+## Installation
+
+Add `hexbuffer-proxy` to your `Cargo.toml` using `cargo add`:
+
+```bash
+cargo add hexbuffer-proxy
+```
+
+Or manually specify it in your `Cargo.toml`:
+
+```toml
+[dependencies]
+hexbuffer-proxy = "1"
+```
 
 ## How It Works
 
@@ -51,10 +68,13 @@ The proxy listens on `127.0.0.1:8080`. Configure your browser or system to use i
 | `make release` | Compile optimized release build |
 | `make check` | Check for compilation errors (fast, no output binary) |
 | `make test` | Run all unit tests |
+| `make publish` | Publish new version to crates.io via `scripts/publish.sh` |
+| `make publish-dry` | Dry-run package and verify crates.io upload |
 | `make fmt` | Format code with `rustfmt` |
 | `make lint` | Run clippy with `-D warnings` |
 | `make watch` | Auto-rebuild on file changes (`cargo watch`) |
 | `make clean` | Remove build artifacts |
+
 
 ## Project Structure
 
