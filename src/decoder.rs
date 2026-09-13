@@ -29,9 +29,9 @@
 //!
 //! # Cargo feature
 //!
-//! Enabled by default. Opt out with:
+//! Disabled by default. Activate with:
 //! ```toml
-//! hexbuffer-proxy = { default-features = false }
+//! hexbuffer-proxy = { version = "1.0", features = ["decoder"] }
 //! ```
 
 use std::io::{Read, Write};

@@ -53,5 +53,5 @@ zstd = { version = "0.13", optional = true, default-features = false }
 criterion = { version = "0.5", features = ["async_tokio"] }
 
 [features]
+default = []
 decoder = ["dep:flate2", "dep:brotli", "dep:zstd"]
-default = ["decoder"]

@@ -19,7 +19,7 @@ bytes = "1"
 
 | Feature | Default | Description |
 |---|---|---|
-| `decoder` | **Enabled** | Application-level request/response body decompression (`decode_request`, `decode_response`), re-encoding (`encode_body`), and `DecodeHandler` plugin for gzip, deflate, brotli, and zstd. |
+| `decoder` | **Disabled** | Application-level request/response body decompression (`decode_request`, `decode_response`), re-encoding (`encode_body`), and `DecodeHandler` plugin for gzip, deflate, brotli, and zstd. Activate with `features = ["decoder"]`. |
 
 ---
 

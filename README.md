@@ -172,10 +172,10 @@ async fn handle_request(&self, ctx: &mut HttpContext, req: Request<Body>) -> Res
 
 ### Cargo feature
 
-Enabled by default. Opt out to keep the binary lean:
+The body decoder is disabled by default. To activate it, enable the `decoder` feature:
 
 ```toml
-hexbuffer-proxy = { default-features = false }
+hexbuffer-proxy = { version = "1.0", features = ["decoder"] }
 ```
 
 ## Enabling and Disabling the Proxy
