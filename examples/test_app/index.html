@@ -119,11 +119,23 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      text-decoration: none;
       transition: all 0.15s ease;
     }
     .btn:hover {
       background: #1C2538;
       border-color: var(--border-focus);
+    }
+    .btn-ca {
+      background: rgba(99, 102, 241, 0.15);
+      border-color: rgba(99, 102, 241, 0.4);
+      color: #C7D2FE;
+    }
+    .btn-ca:hover {
+      background: rgba(99, 102, 241, 0.3);
+      border-color: #818CF8;
+      color: #FFFFFF;
+      box-shadow: 0 0 10px var(--indigo-glow);
     }
     .btn-primary {
       background: var(--indigo);
@@ -133,6 +145,69 @@
     .btn-primary:hover {
       background: #4F46E5;
       box-shadow: 0 0 12px var(--indigo-glow);
+    }
+
+    /* ── CA Instructions Modal ── */
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-card {
+      background: #111827;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      width: 600px;
+      max-width: 92vw;
+      padding: 24px;
+      box-shadow: 0 25px 35px -5px rgba(0, 0, 0, 0.6);
+    }
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .modal-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-close {
+      cursor: pointer;
+      font-size: 20px;
+      color: var(--text-muted);
+      border: none;
+      background: none;
+      padding: 4px 8px;
+    }
+    .modal-close:hover { color: #fff; }
+    .ca-step-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #93C5FD;
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+    .ca-code {
+      background: #090D16;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #A7F3D0;
+      overflow-x: auto;
+      user-select: all;
     }
     .btn-emerald {
       background: var(--emerald);
@@ -398,6 +473,8 @@
     </div>
 
     <div class="controls">
+      <a href="/ca.pem" download="hexbuffer-ca.pem" class="btn btn-ca" title="Download Root CA Certificate (PEM) for browser/OS trust">🛡️ Download CA</a>
+      <button class="btn" onclick="openCaModal()" title="View instructions to install & trust Root CA">ℹ️ Trust Guide</button>
       <button class="btn" onclick="toggleProxy()" id="toggleBtn">Pause Proxy</button>
       <button class="btn btn-emerald" onclick="triggerTest('http')">▶ Test HTTP</button>
       <button class="btn btn-primary" onclick="triggerTest('mock')">⚡ Test Mock</button>
@@ -679,8 +756,50 @@
       return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    function openCaModal() {
+      document.getElementById('caModal').classList.add('open');
+    }
+
+    function closeCaModal() {
+      document.getElementById('caModal').classList.remove('open');
+    }
+
     connectSSE();
     loadHistory();
   </script>
+
+  <!-- CA Trust Instructions Modal -->
+  <div id="caModal" class="modal-backdrop" onclick="if(event.target === this) closeCaModal()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div class="modal-title"><span>🛡️</span> Install & Trust Root Certificate (hexbuffer-ca.pem)</div>
+        <button class="modal-close" onclick="closeCaModal()">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px;">
+        To allow your browser, mobile device, or HTTP clients to intercept HTTPS traffic without TLS security warnings, install the downloaded root certificate authority:
+      </p>
+
+      <div class="ca-step-title">1. Download Certificate:</div>
+      <div style="margin-bottom: 10px;">
+        <a href="/ca.pem" download="hexbuffer-ca.pem" class="btn btn-ca" style="padding: 8px 14px;">
+          ⬇️ Download hexbuffer-ca.pem
+        </a>
+        <span style="font-size: 12px; color: var(--text-muted); margin-left: 10px;">or <code style="color: #93C5FD;">curl -O http://127.0.0.1:8081/ca.pem</code></span>
+      </div>
+
+      <div class="ca-step-title">2. Trust on macOS:</div>
+      <div class="ca-code">sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain hexbuffer-ca.pem</div>
+
+      <div class="ca-step-title">3. Trust on Linux (Ubuntu / Debian):</div>
+      <div class="ca-code">sudo cp hexbuffer-ca.pem /usr/local/share/ca-certificates/hexbuffer-ca.crt && sudo update-ca-certificates</div>
+
+      <div class="ca-step-title">4. Test with curl through Proxy:</div>
+      <div class="ca-code">curl --cacert hexbuffer-ca.pem -x http://127.0.0.1:8080 https://httpbin.org/get</div>
+
+      <div style="margin-top: 16px; text-align: right;">
+        <button class="btn btn-primary" onclick="closeCaModal()">Got it</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

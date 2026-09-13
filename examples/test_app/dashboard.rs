@@ -84,6 +84,19 @@ pub async fn handle_dashboard_request(
                 .unwrap())
         }
 
+        (&Method::GET, "/ca.pem") | (&Method::GET, "/ca.crt") | (&Method::GET, "/api/ca/download") => {
+            let pem = state.ca.ca_cert_pem();
+            Ok(Response::builder()
+                .status(StatusCode::OK)
+                .header("Content-Type", "application/x-x509-ca-cert")
+                .header(
+                    "Content-Disposition",
+                    "attachment; filename=\"hexbuffer-ca.pem\"",
+                )
+                .body(Full::new(Bytes::from(pem.to_string())).boxed())
+                .unwrap())
+        }
+
         (&Method::GET, "/api/history") => {
             let records = state.get_all().await;
             let json = serde_json::to_string(&records).unwrap();
