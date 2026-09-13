@@ -1,13 +1,6 @@
 use rcgen::{
-    BasicConstraints, 
-    CertificateParams, 
-    DistinguishedName, 
-    DnType, 
-    IsCa, 
-    KeyPair, 
-    SanType,
-    ExtendedKeyUsagePurpose,
-    KeyUsagePurpose,
+    BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
+    KeyPair, KeyUsagePurpose, SanType,
 };
 
 use std::collections::HashMap;
@@ -61,13 +54,11 @@ impl CertificationAuthority {
         if cert_path.exists() && key_path.exists() {
             println!("CA certificate found on disk, loading...");
 
-            let ca_cert_pem = std::fs::read_to_string(&cert_path)
-                .expect("Failed to read CA certificate PEM");
-            let key_pem = std::fs::read_to_string(&key_path)
-                .expect("Failed to read CA key PEM");
+            let ca_cert_pem =
+                std::fs::read_to_string(&cert_path).expect("Failed to read CA certificate PEM");
+            let key_pem = std::fs::read_to_string(&key_path).expect("Failed to read CA key PEM");
 
-            let ca_key = KeyPair::from_pem(&key_pem)
-                .expect("Failed to parse CA key from PEM");
+            let ca_key = KeyPair::from_pem(&key_pem).expect("Failed to parse CA key from PEM");
 
             return Self {
                 ca_params,
@@ -106,10 +97,7 @@ impl CertificationAuthority {
     /// and persist both as PEM files under `cert_dir`.
     ///
     /// Returns `(ca_key, ca_cert_pem)`.
-    fn generate_ca(
-        ca_params: &CertificateParams,
-        cert_dir: &PathBuf,
-    ) -> (KeyPair, String) {
+    fn generate_ca(ca_params: &CertificateParams, cert_dir: &PathBuf) -> (KeyPair, String) {
         println!("Generating new CA certificate...");
 
         let ca_key = KeyPair::generate().unwrap();
@@ -122,12 +110,10 @@ impl CertificationAuthority {
         let cert_path = cert_dir.join("ca.pem");
         let key_path = cert_dir.join("ca-key.pem");
 
-        std::fs::write(&cert_path, &ca_cert_pem)
-            .expect("Failed to save CA certificate");
+        std::fs::write(&cert_path, &ca_cert_pem).expect("Failed to save CA certificate");
         println!("CA certificate saved to {}", cert_path.display());
 
-        std::fs::write(&key_path, ca_key.serialize_pem())
-            .expect("Failed to save CA key");
+        std::fs::write(&key_path, ca_key.serialize_pem()).expect("Failed to save CA key");
         println!("CA key saved to {}", key_path.display());
 
         (ca_key, ca_cert_pem)
@@ -164,7 +150,9 @@ impl CertificationAuthority {
         let mut dn = DistinguishedName::new();
         dn.push(DnType::CommonName, host);
         params.distinguished_name = dn;
-        params.subject_alt_names.push(SanType::DnsName(host.to_string().try_into().unwrap()));
+        params
+            .subject_alt_names
+            .push(SanType::DnsName(host.to_string().try_into().unwrap()));
 
         let issuer = rcgen::Issuer::new(self.ca_params.clone(), &self.ca_key);
         let leaf_key = KeyPair::generate().unwrap();
@@ -217,7 +205,11 @@ mod tests {
                 vec![CertificateDer::from(cert_der)],
                 PrivateKeyDer::Pkcs8(key_der.into()),
             );
-        assert!(config.is_ok(), "ServerConfig should be constructible: {:?}", config.err());
+        assert!(
+            config.is_ok(),
+            "ServerConfig should be constructible: {:?}",
+            config.err()
+        );
     }
 
     #[test]
@@ -233,7 +225,10 @@ mod tests {
         let ca = CertificationAuthority::new();
         let (cert1, _) = ca.forge_certificate("example.com");
         let (cert2, _) = ca.forge_certificate("other.org");
-        assert_ne!(cert1, cert2, "different hosts should produce different certs");
+        assert_ne!(
+            cert1, cert2,
+            "different hosts should produce different certs"
+        );
     }
 
     #[test]
@@ -285,8 +280,11 @@ mod tests {
 
         // Second run: loads from disk — same CA cert PEM
         let ca2 = CertificationAuthority::new_in(&dir);
-        assert_eq!(ca2.ca_cert_pem(), &pem1,
-            "CA cert PEM should be identical across restarts");
+        assert_eq!(
+            ca2.ca_cert_pem(),
+            &pem1,
+            "CA cert PEM should be identical across restarts"
+        );
 
         let (cert2, _) = ca2.forge_certificate("second.example.com");
         assert!(!cert2.is_empty());
@@ -315,7 +313,10 @@ mod tests {
         let ca = CertificationAuthority::new_in(&dir);
         let (cert1, _) = ca.forge_certificate("cached.example.com");
         let (cert2, _) = ca.forge_certificate("cached.example.com");
-        assert_eq!(cert1, cert2, "same host should return cached cert with new_in");
+        assert_eq!(
+            cert1, cert2,
+            "same host should return cached cert with new_in"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

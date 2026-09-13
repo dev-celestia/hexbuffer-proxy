@@ -1,5 +1,5 @@
 use crate::ca::CertificationAuthority;
-use crate::handler::{HttpHandler, HttpContext, RequestOrResponse, Body, WebSocketHandler};
+use crate::handler::{Body, HttpContext, HttpHandler, RequestOrResponse, WebSocketHandler};
 use crate::proxy;
 
 // std
@@ -12,14 +12,17 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio_rustls::{
     TlsAcceptor,
-    rustls::{ServerConfig, pki_types::{CertificateDer, PrivateKeyDer}}
+    rustls::{
+        ServerConfig,
+        pki_types::{CertificateDer, PrivateKeyDer},
+    },
 };
 
 // hyper — HTTP/1.1 server on decrypted TLS stream
 use bytes::Bytes;
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use hyper::service::service_fn;
 use hyper::{Request, Response};
-use http_body_util::{Full, combinators::BoxBody, BodyExt};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 
 /// Handle an HTTPS CONNECT tunnel.
@@ -42,14 +45,12 @@ pub(crate) async fn handle_https(
     client_addr: SocketAddr,
     _buf_size: usize,
 ) -> anyhow::Result<()> {
-    let target_host = target
-        .split(':')
-        .next()
-        .unwrap_or(target)
-        .to_string();
+    let target_host = target.split(':').next().unwrap_or(target).to_string();
 
     let mut client = client_stream;
-    client.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n").await?;
+    client
+        .write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        .await?;
 
     // ── Passthrough: raw TCP tunnel ──────────────────────────────
     if !handler.should_intercept_tls(&target_host).await {
@@ -135,8 +136,13 @@ async fn handle_https_request(
             // WebSocket upgrade — detect after body conversion (Hudsucker pattern)
             if hyper_tungstenite::is_upgrade_request(&req) {
                 return crate::ws_proxy::handle_https_websocket(
-                    req, handler, ws_handler, &mut ctx, target_host,
-                ).await;
+                    req,
+                    handler,
+                    ws_handler,
+                    &mut ctx,
+                    target_host,
+                )
+                .await;
             }
 
             // Rewrite URI to absolute form for upstream
@@ -154,7 +160,11 @@ async fn handle_https_request(
                     eprintln!("[#{req_id}] upstream error: {e}");
                     return Ok(Response::builder()
                         .status(502)
-                        .body(Full::new(Bytes::from("Bad Gateway")).map_err(|e| match e {}).boxed())
+                        .body(
+                            Full::new(Bytes::from("Bad Gateway"))
+                                .map_err(|e| match e {})
+                                .boxed(),
+                        )
                         .unwrap());
                 }
             };
@@ -166,7 +176,11 @@ async fn handle_https_request(
                     eprintln!("[#{req_id}] response handler error: {e}");
                     return Ok(Response::builder()
                         .status(502)
-                        .body(Full::new(Bytes::from("Bad Gateway")).map_err(|e| match e {}).boxed())
+                        .body(
+                            Full::new(Bytes::from("Bad Gateway"))
+                                .map_err(|e| match e {})
+                                .boxed(),
+                        )
                         .unwrap());
                 }
             };
@@ -179,7 +193,11 @@ async fn handle_https_request(
             eprintln!("[#{}] request handler error: {}", req_id, e);
             Ok(Response::builder()
                 .status(502)
-                .body(Full::new(Bytes::from("Bad Gateway")).map_err(|e| match e {}).boxed())
+                .body(
+                    Full::new(Bytes::from("Bad Gateway"))
+                        .map_err(|e| match e {})
+                        .boxed(),
+                )
                 .unwrap())
         }
     }

@@ -38,11 +38,11 @@ use std::io::{Read, Write};
 
 use async_trait::async_trait;
 use bytes::Buf;
+use flate2::Compression;
 use flate2::read::{GzDecoder, ZlibDecoder};
 use flate2::write::{GzEncoder, ZlibEncoder};
-use flate2::Compression;
-use http::{Request, Response};
 use http::header::{CONTENT_ENCODING, CONTENT_LENGTH};
+use http::{Request, Response};
 
 use crate::error::{ProxyError, Result};
 use crate::handler::{Body, HttpContext, HttpHandler, RequestOrResponse};
@@ -55,16 +55,16 @@ fn encodings(map: &http::HeaderMap) -> impl Iterator<Item = &[u8]> {
     map.get_all(CONTENT_ENCODING)
         .iter()
         .rev()
-        .flat_map(|val| {
-            val.as_bytes()
-                .rsplit(|&b| b == b',')
-                .map(trim_ascii)
-        })
+        .flat_map(|val| val.as_bytes().rsplit(|&b| b == b',').map(trim_ascii))
 }
 
 fn trim_ascii(bytes: &[u8]) -> &[u8] {
     let start = bytes.iter().position(|&b| b != b' ').unwrap_or(0);
-    let end = bytes.iter().rposition(|&b| b != b' ').map(|p| p + 1).unwrap_or(bytes.len());
+    let end = bytes
+        .iter()
+        .rposition(|&b| b != b' ')
+        .map(|p| p + 1)
+        .unwrap_or(bytes.len());
     &bytes[start..end]
 }
 
@@ -78,14 +78,18 @@ fn should_decode(headers: &http::HeaderMap) -> bool {
 
 // ── Decode ─────────────────────────────────────────────────────
 
-fn pick_decoder<R: Read + Send + 'static>(encoding: &[u8], reader: R) -> Result<Box<dyn Read + Send>> {
+fn pick_decoder<R: Read + Send + 'static>(
+    encoding: &[u8],
+    reader: R,
+) -> Result<Box<dyn Read + Send>> {
     Ok(match encoding {
         b"gzip" | b"x-gzip" => Box::new(GzDecoder::new(reader)),
         b"deflate" => Box::new(ZlibDecoder::new(reader)),
         b"br" => Box::new(brotli::reader::Decompressor::new(reader, 4096)),
-        b"zstd" => Box::new(zstd::stream::read::Decoder::new(reader).map_err(|e| {
-            ProxyError::Protocol(format!("zstd decoder init failed: {e}"))
-        })?),
+        b"zstd" => Box::new(
+            zstd::stream::read::Decoder::new(reader)
+                .map_err(|e| ProxyError::Protocol(format!("zstd decoder init failed: {e}")))?,
+        ),
         other => {
             return Err(ProxyError::Protocol(format!(
                 "unsupported content-encoding: {}",
@@ -194,11 +198,7 @@ pub async fn decode_response(res: Response<Body>) -> Result<Response<Body>> {
 ///     None,
 /// )?;
 /// ```
-pub fn encode_body(
-    body: Body,
-    encoding: &str,
-    _charset: Option<&str>,
-) -> Result<Body> {
+pub fn encode_body(body: Body, encoding: &str, _charset: Option<&str>) -> Result<Body> {
     let bytes = match body {
         Body::Full(b) => b,
         Body::Streaming(_) => {

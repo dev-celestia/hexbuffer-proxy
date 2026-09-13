@@ -1,12 +1,10 @@
 // ws_proxy.rs — WebSocket upgrade detection, upgrade handshake, and bidirectional relay
 use crate::handler::{Body, Direction, HttpContext, HttpHandler, WebSocketHandler};
 
-use anyhow;
 use bytes::Bytes;
 use futures_util::{SinkExt, StreamExt};
 use http::{Request, Response};
-use http_body_util::{Full, combinators::BoxBody, BodyExt};
-use hyper_tungstenite;
+use http_body_util::{BodyExt, Full, combinators::BoxBody};
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use tokio_tungstenite::tungstenite::Message;
@@ -23,11 +21,15 @@ pub(crate) fn is_websocket_upgrade_bytes(raw: &[u8]) -> bool {
 /// Check a parsed request for a WebSocket upgrade.
 /// Check a typed request for a WebSocket upgrade.
 pub(crate) fn is_websocket_upgrade(req: &Request<Body>) -> bool {
-    let is_upgrade = req.headers().get("upgrade")
+    let is_upgrade = req
+        .headers()
+        .get("upgrade")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.to_lowercase().contains("websocket"))
         .unwrap_or(false);
-    let connection_upgrade = req.headers().get("connection")
+    let connection_upgrade = req
+        .headers()
+        .get("connection")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.to_lowercase().contains("upgrade"))
         .unwrap_or(false);
@@ -45,10 +47,7 @@ pub(crate) fn is_websocket_response(res: &Response<Body>) -> bool {
 /// raw frames between the client and upstream without closing either side.
 /// Bidirectional raw TCP relay for WebSocket connections.
 /// Copies bytes between client and server bidirectionally.
-pub(crate) async fn relay_websocket<C, S>(
-    client: &mut C,
-    server: &mut S,
-) -> anyhow::Result<()>
+pub(crate) async fn relay_websocket<C, S>(client: &mut C, server: &mut S) -> anyhow::Result<()>
 where
     C: AsyncRead + AsyncWrite + Unpin,
     S: AsyncRead + AsyncWrite + Unpin,
@@ -79,16 +78,10 @@ where
 {
     use tokio_tungstenite::tungstenite::protocol::Role;
 
-    let mut client_ws = tokio_tungstenite::WebSocketStream::from_raw_socket(
-        client,
-        Role::Server,
-        None,
-    ).await;
-    let mut server_ws = tokio_tungstenite::WebSocketStream::from_raw_socket(
-        server,
-        Role::Client,
-        None,
-    ).await;
+    let mut client_ws =
+        tokio_tungstenite::WebSocketStream::from_raw_socket(client, Role::Server, None).await;
+    let mut server_ws =
+        tokio_tungstenite::WebSocketStream::from_raw_socket(server, Role::Client, None).await;
 
     loop {
         tokio::select! {
@@ -151,8 +144,8 @@ pub(crate) async fn handle_https_websocket(
             http::uri::Scheme::try_from("wss")
                 .map_err(|e| anyhow::anyhow!("[ws] scheme error: {e}"))?,
         );
-        let new_uri = http::Uri::from_parts(parts)
-            .map_err(|e| anyhow::anyhow!("[ws] invalid URI: {e}"))?;
+        let new_uri =
+            http::Uri::from_parts(parts).map_err(|e| anyhow::anyhow!("[ws] invalid URI: {e}"))?;
         *req.uri_mut() = new_uri;
     }
 
@@ -165,7 +158,8 @@ pub(crate) async fn handle_https_websocket(
     for (key, value) in res.headers() {
         response_builder = response_builder.header(key, value);
     }
-    let client_res = response_builder.body(Full::new(Bytes::new()).map_err(|e| match e {}).boxed())?;
+    let client_res =
+        response_builder.body(Full::new(Bytes::new()).map_err(|e| match e {}).boxed())?;
 
     // 4. Build a clean upstream WebSocket request — only essential headers.
     //    Stripping subprotocol/extensions from the cloned client request is fragile
@@ -173,15 +167,21 @@ pub(crate) async fn handle_https_websocket(
     let ctx_id = ctx.id;
     let ctx_host = ctx.host.clone();
     let target_host = target_host.to_string();
-    let path = req.uri().path_and_query()
+    let path = req
+        .uri()
+        .path_and_query()
         .map(|pq| pq.as_str())
         .unwrap_or("/")
         .to_string();
     // Keep Origin + Cookie for sites that need them (auth, CORS)
-    let origin = req.headers().get("origin")
+    let origin = req
+        .headers()
+        .get("origin")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
-    let cookie = req.headers().get("cookie")
+    let cookie = req
+        .headers()
+        .get("cookie")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
     tokio::spawn(async move {
@@ -220,8 +220,13 @@ pub(crate) async fn handle_https_websocket(
                 }));
 
                 match tokio_tungstenite::connect_async_tls_with_config(
-                    upgrade_req, None, false, Some(connector),
-                ).await {
+                    upgrade_req,
+                    None,
+                    false,
+                    Some(connector),
+                )
+                .await
+                {
                     Ok((server_ws, _)) => {
                         if let Some(ws) = ws_handler {
                             let mut relay_ctx = HttpContext {
@@ -340,14 +345,13 @@ where
     Ok(())
 }
 
-
 // ── Tests ──────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use http::{Request, Response};
     use crate::handler::Body;
+    use http::{Request, Response};
 
     fn make_upgrade_request() -> Request<Body> {
         Request::builder()

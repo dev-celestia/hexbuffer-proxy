@@ -2,9 +2,9 @@ use std::net::SocketAddr;
 
 use async_trait::async_trait;
 
+use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::{BodyExt, Full, combinators::BoxBody};
-use bytes::Bytes;
 use hyper;
 
 use crate::error::Result;
@@ -183,11 +183,7 @@ pub enum Direction {
 pub trait WebSocketHandler: Send + Sync {
     /// Called when a WebSocket upgrade is detected,
     /// before the request is forwarded upstream.
-    async fn on_upgrade(
-        &self,
-        _ctx: &mut HttpContext,
-        request: Request<Body>,
-    ) -> Request<Body> {
+    async fn on_upgrade(&self, _ctx: &mut HttpContext, request: Request<Body>) -> Request<Body> {
         request
     }
 
@@ -216,7 +212,6 @@ pub struct NoopWebSocketHandler;
 
 #[async_trait]
 impl WebSocketHandler for NoopWebSocketHandler {}
-
 
 // ── Tests ──────────────────────────────────────────────────────────
 

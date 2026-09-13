@@ -19,27 +19,27 @@
 //! - WebSocket connections are detected, relayed, and optionally
 //!   intercepted frame-by-frame via [`WebSocketHandler`].
 
+pub mod builder;
 pub mod ca;
 pub mod error;
 pub mod handler;
-pub mod builder;
 
 // Optional application-level body decoder
 #[cfg(feature = "decoder")]
 pub mod decoder;
 
 // Internal modules
-mod proxy;
 mod http_proxy;
 mod https_proxy;
-mod ws_proxy;
+mod proxy;
 mod upstream;
+mod ws_proxy;
 
 // Re-export public API at crate root
-pub use builder::{ProxyBuilder, Proxy};
-pub use handler::{
-    HttpHandler, HttpContext, Body, RequestOrResponse, NoopHandler, full_body,
-    WebSocketHandler, Direction, WebSocketMessage, NoopWebSocketHandler,
-};
-pub use error::{ProxyError, Result};
+pub use builder::{Proxy, ProxyBuilder};
 pub use ca::CertificationAuthority;
+pub use error::{ProxyError, Result};
+pub use handler::{
+    Body, Direction, HttpContext, HttpHandler, NoopHandler, NoopWebSocketHandler,
+    RequestOrResponse, WebSocketHandler, WebSocketMessage, full_body,
+};

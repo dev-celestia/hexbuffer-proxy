@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use http::{Request, Response};
-use http_body_util::{combinators::BoxBody, BodyExt};
+use http_body_util::{BodyExt, combinators::BoxBody};
 use hyper_rustls::HttpsConnector;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;

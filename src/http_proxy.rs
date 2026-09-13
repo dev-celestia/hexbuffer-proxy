@@ -1,4 +1,4 @@
-use crate::handler::{HttpHandler, HttpContext, RequestOrResponse, Body, WebSocketHandler};
+use crate::handler::{Body, HttpContext, HttpHandler, RequestOrResponse, WebSocketHandler};
 use crate::proxy;
 
 // std
@@ -24,16 +24,19 @@ pub(crate) async fn handle_http(
     ws_handler: Option<Arc<dyn WebSocketHandler>>,
     client_addr: std::net::SocketAddr,
     buf_size: usize,
-    request_str: String,
+    request_bytes: Vec<u8>,
 ) -> anyhow::Result<()> {
-    let request_bytes = request_str.as_bytes();
-    let request = proxy::parse_raw_request(request_bytes)?;
+    let request = proxy::parse_raw_request(&request_bytes)?;
 
     // Resolve target from Host header or absolute URI
-    let host = match extract_host(&request, &request_str) {
+    let host = match extract_host(&request, &request_bytes) {
         Ok(h) => h,
         Err(_) => {
-            client_stream.write_all(b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await?;
+            client_stream
+                .write_all(
+                    b"HTTP/1.1 400 Bad Request\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .await?;
             client_stream.shutdown().await?;
             return Ok(());
         }
@@ -78,13 +81,11 @@ pub(crate) async fn handle_http(
                 client_stream.write_all(&final_bytes).await?;
                 if crate::ws_proxy::is_websocket_response(&modified_response) {
                     if let Some(ws) = ws_handler {
-                        crate::ws_proxy::relay_framed(
-                            client_stream, server_stream, ws, &mut ctx,
-                        ).await?;
+                        crate::ws_proxy::relay_framed(client_stream, server_stream, ws, &mut ctx)
+                            .await?;
                     } else {
-                        crate::ws_proxy::relay_websocket(
-                            &mut client_stream, &mut server_stream,
-                        ).await?;
+                        crate::ws_proxy::relay_websocket(&mut client_stream, &mut server_stream)
+                            .await?;
                     }
                 } else {
                     client_stream.shutdown().await?;
@@ -119,14 +120,19 @@ pub(crate) async fn handle_http(
 // ── HTTP helpers ─────────────────────────────────────────────────
 
 /// Extract target host from Host header or absolute URI.
-fn extract_host(req: &Request<Body>, raw: &str) -> anyhow::Result<String> {
+fn extract_host(req: &Request<Body>, raw: &[u8]) -> anyhow::Result<String> {
     // 1. Try Host header
     if let Some(host) = req.headers().get("host").and_then(|v| v.to_str().ok()) {
         return Ok(host.to_string());
     }
 
     // 2. Fallback: absolute URI (e.g. proxy requests like GET http://example.com/)
-    if let Some(uri) = raw.lines().next().and_then(|l| l.split_whitespace().nth(1)) {
+    let text = String::from_utf8_lossy(raw);
+    if let Some(uri) = text
+        .lines()
+        .next()
+        .and_then(|l| l.split_whitespace().nth(1))
+    {
         for prefix in &["http://", "https://"] {
             if let Some(rest) = uri.strip_prefix(prefix) {
                 return Ok(rest.split('/').next().unwrap_or(rest).to_string());
@@ -174,7 +180,7 @@ mod tests {
     fn test_extract_host_from_host_header() {
         let raw = b"GET / HTTP/1.1\r\nHost: www.example.com\r\n\r\n";
         let req = proxy::parse_raw_request(raw).unwrap();
-        let host = extract_host(&req, std::str::from_utf8(raw).unwrap()).unwrap();
+        let host = extract_host(&req, raw).unwrap();
         assert_eq!(host, "www.example.com");
     }
 
@@ -182,7 +188,7 @@ mod tests {
     fn test_extract_host_from_absolute_uri() {
         let raw = b"GET http://api.example.com/v1/data HTTP/1.1\r\n\r\n";
         let req = proxy::parse_raw_request(raw).unwrap();
-        let host = extract_host(&req, std::str::from_utf8(raw).unwrap()).unwrap();
+        let host = extract_host(&req, raw).unwrap();
         assert_eq!(host, "api.example.com");
     }
 
@@ -190,7 +196,7 @@ mod tests {
     fn test_extract_host_missing_errors() {
         let raw = b"GET / HTTP/1.1\r\n\r\n";
         let req = proxy::parse_raw_request(raw).unwrap();
-        let result = extract_host(&req, std::str::from_utf8(raw).unwrap());
+        let result = extract_host(&req, raw);
         assert!(result.is_err());
     }
 

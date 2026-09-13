@@ -11,7 +11,9 @@ use http::{Request, Response};
 
 use crate::ca::CertificationAuthority;
 use crate::error::Result;
-use crate::handler::{HttpHandler, HttpContext, RequestOrResponse, Body, NoopHandler, WebSocketHandler};
+use crate::handler::{
+    Body, HttpContext, HttpHandler, NoopHandler, RequestOrResponse, WebSocketHandler,
+};
 
 // ── ProxyBuilder ───────────────────────────────────────────────────
 
@@ -162,6 +164,7 @@ impl Default for ProxyBuilder {
 /// A running proxy server.
 /// A fully-assembled proxy ready to listen on a socket.
 /// Created by [`ProxyBuilder::build`].
+#[derive(Clone)]
 pub struct Proxy {
     addr: SocketAddr,
     ca: Arc<CertificationAuthority>,
@@ -197,10 +200,13 @@ impl Proxy {
         Arc::clone(&self.enabled)
     }
 
-    /// Start the proxy — binds to the configured address and runs the accept loop.
-    pub async fn start(self) -> Result<()> {
-        let listener = TcpListener::bind(self.addr).await?;
-        println!("Proxy listening on {}", self.addr);
+    /// Start the proxy on an existing pre-bound [`TcpListener`].
+    ///
+    /// Useful for testing with ephemeral ports (e.g. `127.0.0.1:0`)
+    /// or when integrating with externally managed sockets.
+    pub async fn start_with_listener(self, listener: TcpListener) -> Result<()> {
+        let local_addr = listener.local_addr().unwrap_or(self.addr);
+        println!("Proxy listening on {}", local_addr);
 
         let ca = self.ca;
         let handler = self.handler;
@@ -214,11 +220,19 @@ impl Proxy {
             let ws_handler = ws_handler.clone();
 
             tokio::spawn(async move {
-                if let Err(e) = crate::proxy::handle_client(stream, ca, handler, ws_handler, buf_size).await {
+                if let Err(e) =
+                    crate::proxy::handle_client(stream, ca, handler, ws_handler, buf_size).await
+                {
                     eprintln!("[{}] error: {}", addr, e);
                 }
             });
         }
+    }
+
+    /// Start the proxy — binds to the configured address and runs the accept loop.
+    pub async fn start(self) -> Result<()> {
+        let listener = TcpListener::bind(self.addr).await?;
+        self.start_with_listener(listener).await
     }
 }
 
@@ -315,8 +329,8 @@ impl HttpHandler for HandlerStack {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
     use http::header::HeaderName;
+    use std::sync::Mutex;
 
     // ── helpers ────────────────────────────────────────────────────
 
@@ -390,18 +404,23 @@ mod tests {
         struct A;
         #[async_trait]
         impl HttpHandler for A {
-            async fn handle_request(&self, _: &mut HttpContext, r: Request<Body>) -> Result<RequestOrResponse> {
+            async fn handle_request(
+                &self,
+                _: &mut HttpContext,
+                r: Request<Body>,
+            ) -> Result<RequestOrResponse> {
                 Ok(RequestOrResponse::Request(r))
             }
-            async fn handle_response(&self, _: &mut HttpContext, r: Response<Body>) -> Result<Response<Body>> {
+            async fn handle_response(
+                &self,
+                _: &mut HttpContext,
+                r: Response<Body>,
+            ) -> Result<Response<Body>> {
                 Ok(r)
             }
         }
 
-        let proxy = ProxyBuilder::new()
-            .with_http_handler(A)
-            .build()
-            .unwrap();
+        let proxy = ProxyBuilder::new().with_http_handler(A).build().unwrap();
 
         // Single handler: stored directly (not wrapped in HandlerStack).
         assert_eq!(Arc::strong_count(&proxy.handler), 1);
@@ -413,19 +432,35 @@ mod tests {
         struct B;
         #[async_trait]
         impl HttpHandler for A {
-            async fn handle_request(&self, _: &mut HttpContext, r: Request<Body>) -> Result<RequestOrResponse> {
+            async fn handle_request(
+                &self,
+                _: &mut HttpContext,
+                r: Request<Body>,
+            ) -> Result<RequestOrResponse> {
                 Ok(RequestOrResponse::Request(r))
             }
-            async fn handle_response(&self, _: &mut HttpContext, r: Response<Body>) -> Result<Response<Body>> {
+            async fn handle_response(
+                &self,
+                _: &mut HttpContext,
+                r: Response<Body>,
+            ) -> Result<Response<Body>> {
                 Ok(r)
             }
         }
         #[async_trait]
         impl HttpHandler for B {
-            async fn handle_request(&self, _: &mut HttpContext, r: Request<Body>) -> Result<RequestOrResponse> {
+            async fn handle_request(
+                &self,
+                _: &mut HttpContext,
+                r: Request<Body>,
+            ) -> Result<RequestOrResponse> {
                 Ok(RequestOrResponse::Request(r))
             }
-            async fn handle_response(&self, _: &mut HttpContext, r: Response<Body>) -> Result<Response<Body>> {
+            async fn handle_response(
+                &self,
+                _: &mut HttpContext,
+                r: Response<Body>,
+            ) -> Result<Response<Body>> {
                 Ok(r)
             }
         }
@@ -457,16 +492,19 @@ mod tests {
         let dir = std::env::temp_dir().join("builder_ca_test");
         let _ = std::fs::remove_dir_all(&dir);
 
-        let proxy = ProxyBuilder::new()
-            .with_cert_dir(&dir)
-            .build()
-            .unwrap();
+        let proxy = ProxyBuilder::new().with_cert_dir(&dir).build().unwrap();
 
         let cert_path = dir.join("ca.pem");
         let key_path = dir.join("ca-key.pem");
 
-        assert!(cert_path.exists(), "builder with_cert_dir should create ca.pem");
-        assert!(key_path.exists(), "builder with_cert_dir should create ca-key.pem");
+        assert!(
+            cert_path.exists(),
+            "builder with_cert_dir should create ca.pem"
+        );
+        assert!(
+            key_path.exists(),
+            "builder with_cert_dir should create ca-key.pem"
+        );
 
         // The proxy's CA should be functional
         let (cert_der, _) = proxy.ca.forge_certificate("builder.example.com");
@@ -494,8 +532,10 @@ mod tests {
 
         // The explicit CA should still work and produce the same cached cert
         let (forged_after, _) = proxy.ca.forge_certificate("explicit.example.com");
-        assert_eq!(forged_before, forged_after,
-            "explicit CA should be used, not one created from cert_dir");
+        assert_eq!(
+            forged_before, forged_after,
+            "explicit CA should be used, not one created from cert_dir"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
         let _ = std::fs::remove_dir_all(&other_dir);
@@ -527,19 +567,23 @@ mod tests {
 
     #[async_trait]
     impl HttpHandler for AddHeaderHandler {
-        async fn handle_request(&self, _: &mut HttpContext, mut req: Request<Body>) -> Result<RequestOrResponse> {
-            req.headers_mut().insert(
-                HeaderName::from_static(self.key),
-                self.val.parse().unwrap(),
-            );
+        async fn handle_request(
+            &self,
+            _: &mut HttpContext,
+            mut req: Request<Body>,
+        ) -> Result<RequestOrResponse> {
+            req.headers_mut()
+                .insert(HeaderName::from_static(self.key), self.val.parse().unwrap());
             Ok(RequestOrResponse::Request(req))
         }
 
-        async fn handle_response(&self, _: &mut HttpContext, mut res: Response<Body>) -> Result<Response<Body>> {
-            res.headers_mut().insert(
-                HeaderName::from_static(self.key),
-                self.val.parse().unwrap(),
-            );
+        async fn handle_response(
+            &self,
+            _: &mut HttpContext,
+            mut res: Response<Body>,
+        ) -> Result<Response<Body>> {
+            res.headers_mut()
+                .insert(HeaderName::from_static(self.key), self.val.parse().unwrap());
             Ok(res)
         }
     }
@@ -549,7 +593,11 @@ mod tests {
 
     #[async_trait]
     impl HttpHandler for BlockHandler {
-        async fn handle_request(&self, _: &mut HttpContext, _req: Request<Body>) -> Result<RequestOrResponse> {
+        async fn handle_request(
+            &self,
+            _: &mut HttpContext,
+            _req: Request<Body>,
+        ) -> Result<RequestOrResponse> {
             let res = Response::builder()
                 .status(403)
                 .body(Body::Full(bytes::Bytes::from("blocked")))
@@ -557,7 +605,11 @@ mod tests {
             Ok(RequestOrResponse::Response(res))
         }
 
-        async fn handle_response(&self, _: &mut HttpContext, res: Response<Body>) -> Result<Response<Body>> {
+        async fn handle_response(
+            &self,
+            _: &mut HttpContext,
+            res: Response<Body>,
+        ) -> Result<Response<Body>> {
             Ok(res)
         }
     }
@@ -569,17 +621,27 @@ mod tests {
 
     impl CountingHandler {
         fn new() -> Self {
-            Self { count: Mutex::new(0) }
+            Self {
+                count: Mutex::new(0),
+            }
         }
     }
 
     #[async_trait]
     impl HttpHandler for CountingHandler {
-        async fn handle_request(&self, _: &mut HttpContext, r: Request<Body>) -> Result<RequestOrResponse> {
+        async fn handle_request(
+            &self,
+            _: &mut HttpContext,
+            r: Request<Body>,
+        ) -> Result<RequestOrResponse> {
             Ok(RequestOrResponse::Request(r))
         }
 
-        async fn handle_response(&self, _: &mut HttpContext, r: Response<Body>) -> Result<Response<Body>> {
+        async fn handle_response(
+            &self,
+            _: &mut HttpContext,
+            r: Response<Body>,
+        ) -> Result<Response<Body>> {
             *self.count.lock().unwrap() += 1;
             Ok(r)
         }
@@ -588,8 +650,14 @@ mod tests {
     #[tokio::test]
     async fn test_handler_stack_chains_requests() {
         let stack = HandlerStack::new(vec![
-            Arc::new(AddHeaderHandler { key: "x-a", val: "1" }),
-            Arc::new(AddHeaderHandler { key: "x-b", val: "2" }),
+            Arc::new(AddHeaderHandler {
+                key: "x-a",
+                val: "1",
+            }),
+            Arc::new(AddHeaderHandler {
+                key: "x-b",
+                val: "2",
+            }),
         ]);
 
         let mut ctx = make_ctx();
@@ -609,8 +677,14 @@ mod tests {
     #[tokio::test]
     async fn test_handler_stack_chains_responses() {
         let stack = HandlerStack::new(vec![
-            Arc::new(AddHeaderHandler { key: "x-a", val: "1" }),
-            Arc::new(AddHeaderHandler { key: "x-b", val: "2" }),
+            Arc::new(AddHeaderHandler {
+                key: "x-a",
+                val: "1",
+            }),
+            Arc::new(AddHeaderHandler {
+                key: "x-b",
+                val: "2",
+            }),
         ]);
 
         let mut ctx = make_ctx();
@@ -630,10 +704,18 @@ mod tests {
         struct NeverCalled;
         #[async_trait]
         impl HttpHandler for NeverCalled {
-            async fn handle_request(&self, _: &mut HttpContext, _: Request<Body>) -> Result<RequestOrResponse> {
+            async fn handle_request(
+                &self,
+                _: &mut HttpContext,
+                _: Request<Body>,
+            ) -> Result<RequestOrResponse> {
                 panic!("this handler should not be called");
             }
-            async fn handle_response(&self, _: &mut HttpContext, _: Response<Body>) -> Result<Response<Body>> {
+            async fn handle_response(
+                &self,
+                _: &mut HttpContext,
+                _: Response<Body>,
+            ) -> Result<Response<Body>> {
                 panic!("this handler should not be called");
             }
         }
@@ -654,7 +736,9 @@ mod tests {
             RequestOrResponse::Response(res) => {
                 assert_eq!(res.status(), 403);
             }
-            RequestOrResponse::Request(_) => panic!("expected Response (short-circuit), got Request"),
+            RequestOrResponse::Request(_) => {
+                panic!("expected Response (short-circuit), got Request")
+            }
         }
 
         // CountingHandler was AFTER BlockHandler — it should NOT have been called.
@@ -668,9 +752,10 @@ mod tests {
         // circuited request there is no upstream response to handle).
         // This test verifies the response chain works independently.
 
-        let stack = HandlerStack::new(vec![
-            Arc::new(AddHeaderHandler { key: "x-custom", val: "added" }),
-        ]);
+        let stack = HandlerStack::new(vec![Arc::new(AddHeaderHandler {
+            key: "x-custom",
+            val: "added",
+        })]);
 
         let mut ctx = make_ctx();
         let res = make_response();
@@ -725,10 +810,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_proxy_enable_disable_toggle() {
-        let proxy = ProxyBuilder::new()
-            .with_enabled(false)
-            .build()
-            .unwrap();
+        let proxy = ProxyBuilder::new().with_enabled(false).build().unwrap();
 
         assert!(!proxy.is_enabled());
         assert!(!proxy.handler.should_intercept_tls("example.com").await);
@@ -740,5 +822,21 @@ mod tests {
         proxy.disable();
         assert!(!proxy.is_enabled());
         assert!(!proxy.handler.should_intercept_tls("example.com").await);
+    }
+
+    #[tokio::test]
+    async fn test_start_with_listener_accepts_connection() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let proxy = ProxyBuilder::new().build().unwrap();
+        let handle = tokio::spawn(async move {
+            let _ = proxy.start_with_listener(listener).await;
+        });
+
+        let stream = tokio::net::TcpStream::connect(addr).await;
+        assert!(stream.is_ok());
+
+        handle.abort();
     }
 }
