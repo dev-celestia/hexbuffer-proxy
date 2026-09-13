@@ -66,6 +66,11 @@ impl HttpHandler for InspectorHttpHandler {
         ctx: &mut HttpContext,
         mut req: Request<Body>,
     ) -> hexbuffer_proxy::Result<RequestOrResponse> {
+        // Ignore dashboard internal traffic to prevent self-interception feedback loops
+        if ctx.host.contains(":8081") || req.uri().port_u16() == Some(8081) {
+            return Ok(RequestOrResponse::Request(req));
+        }
+
         let start = Instant::now();
 
         // Inject header to demonstrate proxy request modification
@@ -140,6 +145,10 @@ impl HttpHandler for InspectorHttpHandler {
         ctx: &mut HttpContext,
         mut res: Response<Body>,
     ) -> hexbuffer_proxy::Result<Response<Body>> {
+        if ctx.host.contains(":8081") {
+            return Ok(res);
+        }
+
         let (start, req_headers, req_body) = self
             .req_start
             .lock()

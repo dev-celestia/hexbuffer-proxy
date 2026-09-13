@@ -7,8 +7,14 @@ UPSTREAM_PORT := 8082
 kill-ports:
 	@lsof -ti :$(PORT) -ti :$(UI_PORT) -ti :$(UPSTREAM_PORT) | xargs kill -9 2>/dev/null; true
 
-app: kill-ports
-	cargo run --example test_app --features decoder
+app:
+	@./scripts/run_test_app.sh
+
+app-chrome:
+	@./scripts/run_test_app.sh --chrome
+
+app-release:
+	@./scripts/run_test_app.sh --release
 
 run: kill-ports
 	cargo run --example proxy

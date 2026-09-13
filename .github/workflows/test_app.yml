@@ -111,3 +111,10 @@ jobs:
             target/debug/examples/test_app
             target/debug/examples/test_app.exe
           if-no-files-found: ignore
+
+      - name: Verify GitHub Pages (/docs) bundle
+        run: |
+          test -f docs/index.html || { echo "docs/index.html is missing!"; exit 1; }
+          test -f docs/ca.pem || { echo "docs/ca.pem is missing!"; exit 1; }
+          test -f docs/usage.md || { echo "docs/usage.md is missing!"; exit 1; }
+          echo "GitHub Pages /docs bundle is complete and ready to serve."
