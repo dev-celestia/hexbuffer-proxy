@@ -674,6 +674,8 @@ dependencies = [
  "hyper-util",
  "rcgen",
  "rustls-pki-types",
+ "serde",
+ "serde_json",
  "thiserror",
  "time",
  "tokio",

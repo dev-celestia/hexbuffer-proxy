@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hexbuffer Proxy — Live Traffic Inspector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0B0F19;
+      --card-bg: #111827;
+      --card-header: #162032;
+      --border: #1F2937;
+      --border-focus: #374151;
+      --text: #F3F4F6;
+      --text-muted: #9CA3AF;
+      --emerald: #10B981;
+      --emerald-glow: rgba(16, 185, 129, 0.15);
+      --indigo: #6366F1;
+      --indigo-glow: rgba(99, 102, 241, 0.2);
+      --amber: #F59E0B;
+      --rose: #EF4444;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Top Navigation Bar ── */
+    header {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, #10B981, #6366F1);
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .status-active {
+      background: var(--emerald-glow);
+      color: var(--emerald);
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+    .status-disabled {
+      background: rgba(239, 68, 68, 0.15);
+      color: var(--rose);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .btn {
+      background: var(--card-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 7px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: #1C2538;
+      border-color: var(--border-focus);
+    }
+    .btn-primary {
+      background: var(--indigo);
+      border-color: var(--indigo);
+      color: #fff;
+    }
+    .btn-primary:hover {
+      background: #4F46E5;
+      box-shadow: 0 0 12px var(--indigo-glow);
+    }
+    .btn-emerald {
+      background: var(--emerald);
+      border-color: var(--emerald);
+      color: #042F2E;
+      font-weight: 600;
+    }
+    .btn-emerald:hover {
+      background: #059669;
+      color: #fff;
+    }
+
+    /* ── Main Layout (Split Pane) ── */
+    main {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .sidebar {
+      width: 440px;
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      background: #0D1322;
+    }
+
+    .sidebar-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .sidebar-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .request-list {
+      flex: 1;
+      overflow-y: auto;
+      list-style: none;
+    }
+
+    .request-item {
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(31, 41, 55, 0.5);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: background 0.1s;
+    }
+    .request-item:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .request-item.selected {
+      background: rgba(99, 102, 241, 0.12);
+      border-left: 3px solid var(--indigo);
+    }
+
+    .badge-method {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 6px;
+      border-radius: 4px;
+      min-width: 44px;
+      text-align: center;
+    }
+    .badge-GET { background: rgba(16, 185, 129, 0.15); color: var(--emerald); }
+    .badge-POST { background: rgba(99, 102, 241, 0.2); color: #A5B4FC; }
+    .badge-CONNECT { background: rgba(245, 158, 11, 0.15); color: var(--amber); }
+    .badge-WS { background: rgba(236, 72, 153, 0.2); color: #F472B6; }
+
+    .req-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .req-url {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .req-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .status-code {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .status-2xx { color: var(--emerald); }
+    .status-3xx { color: #60A5FA; }
+    .status-4xx { color: var(--amber); }
+    .status-5xx { color: var(--rose); }
+
+    /* ── Inspector (Right Panel) ── */
+    .inspector {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--card-bg);
+      overflow: hidden;
+    }
+
+    .inspector-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-muted);
+      gap: 12px;
+    }
+
+    .inspector-header {
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card-header);
+    }
+    .inspector-title-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+    .full-url {
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--mono);
+      word-break: break-all;
+    }
+
+    .meta-tags {
+      display: flex;
+      gap: 8px;
+    }
+    .meta-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: #0F1626;
+      padding: 0 16px;
+    }
+    .tab {
+      padding: 12px 18px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active {
+      color: var(--emerald);
+      border-bottom-color: var(--emerald);
+    }
+
+    .tab-content {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+    }
+
+    .header-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 11px;
+      margin-bottom: 20px;
+    }
+    .header-table td {
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(31, 41, 55, 0.5);
+    }
+    .header-key {
+      color: #93C5FD;
+      width: 220px;
+      font-weight: 500;
+    }
+    .header-val {
+      color: #D1D5DB;
+      word-break: break-all;
+    }
+
+    .body-box {
+      background: #090D16;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: #A7F3D0;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 350px;
+      overflow-y: auto;
+    }
+
+    /* WebSocket frames table */
+    .ws-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: var(--mono);
+      font-size: 11px;
+    }
+    .ws-table th, .ws-table td {
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .ws-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .ws-dir-c2s { color: #60A5FA; }
+    .ws-dir-s2c { color: #34D399; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header>
+    <div class="brand">
+      <div class="logo-badge">HEXBUFFER</div>
+      <div class="title">Proxy Traffic Inspector & Test Dashboard</div>
+      <div id="statusPill" class="status-pill status-active">
+        <span class="dot"></span>
+        <span id="statusText">PROXY ACTIVE (8080)</span>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn" onclick="toggleProxy()" id="toggleBtn">Pause Proxy</button>
+      <button class="btn btn-emerald" onclick="triggerTest('http')">▶ Test HTTP</button>
+      <button class="btn btn-primary" onclick="triggerTest('mock')">⚡ Test Mock</button>
+      <button class="btn btn-primary" onclick="triggerTest('https')">🔒 Test HTTPS MITM</button>
+      <button class="btn btn-primary" onclick="triggerTest('ws')">💬 Test WS</button>
+      <button class="btn" onclick="clearLogs()">🗑 Clear</button>
+    </div>
+  </header>
+
+  <!-- Main Split Layout -->
+  <main>
+    <!-- Left List -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-title">Captured Traffic (<span id="reqCount">0</span>)</div>
+      </div>
+      <ul class="request-list" id="requestList">
+        <!-- Injected via JS -->
+      </ul>
+    </div>
+
+    <!-- Right Inspector -->
+    <div class="inspector" id="inspectorPanel">
+      <div class="inspector-empty" id="emptyState">
+        <div style="font-size: 36px;">🛰</div>
+        <div>No request selected</div>
+        <div style="font-size: 12px; color: #6B7280;">Click a test button above or make requests via proxy at 127.0.0.1:8080</div>
+      </div>
+
+      <div id="detailView" style="display: none; height: 100%; flex-direction: column;">
+        <div class="inspector-header">
+          <div class="inspector-title-row">
+            <span class="badge-method" id="detailMethod">GET</span>
+            <span class="status-code status-2xx" id="detailStatus">200 OK</span>
+            <span class="full-url" id="detailUrl">http://...</span>
+          </div>
+          <div class="meta-tags">
+            <span class="meta-tag" id="detailProto">HTTP</span>
+            <span class="meta-tag" id="detailDuration">0 ms</span>
+            <span class="meta-tag" id="detailClient">127.0.0.1</span>
+            <span class="meta-tag" id="detailMock" style="display: none; background: rgba(99, 102, 241, 0.3); color: #C7D2FE;">⚡ SHORT-CIRCUITED</span>
+          </div>
+        </div>
+
+        <div class="tabs">
+          <div class="tab active" onclick="switchTab('request')">Request</div>
+          <div class="tab" onclick="switchTab('response')">Response</div>
+          <div class="tab" onclick="switchTab('ws')" id="wsTabBtn" style="display: none;">WebSocket Frames</div>
+        </div>
+
+        <div class="tab-content" id="tabRequest">
+          <div class="section-title">Request Headers</div>
+          <table class="header-table" id="reqHeaderTable"></table>
+          <div class="section-title">Request Body</div>
+          <pre class="body-box" id="reqBodyBox">(empty)</pre>
+        </div>
+
+        <div class="tab-content" id="tabResponse" style="display: none;">
+          <div class="section-title">Response Headers</div>
+          <table class="header-table" id="resHeaderTable"></table>
+          <div class="section-title">Response Body</div>
+          <pre class="body-box" id="resBodyBox">(empty)</pre>
+        </div>
+
+        <div class="tab-content" id="tabWs" style="display: none;">
+          <div class="section-title">Captured Frames</div>
+          <table class="ws-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Direction</th>
+                <th>Opcode</th>
+                <th>Payload</th>
+              </tr>
+            </thead>
+            <tbody id="wsFrameRows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    let records = [];
+    let selectedId = null;
+
+    function connectSSE() {
+      try {
+        const es = new EventSource('/events');
+        es.onmessage = (e) => {
+          try {
+            const rec = JSON.parse(e.data);
+            records.unshift(rec);
+            if (records.length > 100) records.pop();
+            renderList();
+            if (selectedId === null) {
+              selectRecord(rec.id);
+            }
+          } catch (err) {
+            console.error(err);
+          }
+        };
+        es.onerror = () => {
+          es.close();
+          setTimeout(pollFallback, 1200);
+        };
+      } catch (_) {
+        setTimeout(pollFallback, 1200);
+      }
+    }
+
+    async function pollFallback() {
+      await loadHistory();
+      setTimeout(pollFallback, 1500);
+    }
+
+    async function loadHistory() {
+      try {
+        const res = await fetch('/api/history');
+        const data = await res.json();
+        data.reverse();
+        records = data;
+        renderList();
+        if (records.length > 0 && selectedId === null) {
+          selectRecord(records[0].id);
+        }
+        updateStatus();
+      } catch (_) {}
+    }
+
+    async function updateStatus() {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        const pill = document.getElementById('statusPill');
+        const text = document.getElementById('statusText');
+        const btn = document.getElementById('toggleBtn');
+        if (data.enabled) {
+          pill.className = 'status-pill status-active';
+          text.innerText = 'PROXY ACTIVE (8080)';
+          btn.innerText = 'Pause Proxy';
+        } else {
+          pill.className = 'status-pill status-disabled';
+          text.innerText = 'PROXY PAUSED (BYPASSED)';
+          btn.innerText = 'Resume Proxy';
+        }
+      } catch (_) {}
+    }
+
+    async function toggleProxy() {
+      await fetch('/api/toggle', { method: 'POST' });
+      await updateStatus();
+    }
+
+    async function triggerTest(type) {
+      await fetch('/api/trigger/' + type, { method: 'POST' });
+    }
+
+    async function clearLogs() {
+      await fetch('/api/clear', { method: 'POST' });
+      records = [];
+      selectedId = null;
+      renderList();
+      document.getElementById('emptyState').style.display = 'flex';
+      document.getElementById('detailView').style.display = 'none';
+    }
+
+    function renderList() {
+      document.getElementById('reqCount').innerText = records.length;
+      const list = document.getElementById('requestList');
+      list.innerHTML = records.map(r => `
+        <li class="request-item ${r.id === selectedId ? 'selected' : ''}" onclick="selectRecord(${r.id})">
+          <span class="badge-method badge-${r.protocol === 'WS' ? 'WS' : r.method}">${r.protocol === 'WS' ? 'WS' : r.method}</span>
+          <div class="req-info">
+            <div class="req-url">${escapeHtml(r.url)}</div>
+            <div class="req-sub">
+              <span class="status-code status-${Math.floor(r.status / 100)}xx">${r.status}</span>
+              <span>• ${r.duration_ms}ms</span>
+              <span>• ${r.timestamp}</span>
+              ${r.short_circuited ? '<span style="color: #A5B4FC;">⚡ Mock</span>' : ''}
+            </div>
+          </div>
+        </li>
+      `).join('');
+    }
+
+    function selectRecord(id) {
+      selectedId = id;
+      renderList();
+      const rec = records.find(r => r.id === id);
+      if (!rec) return;
+
+      document.getElementById('emptyState').style.display = 'none';
+      const dv = document.getElementById('detailView');
+      dv.style.display = 'flex';
+
+      const bm = document.getElementById('detailMethod');
+      bm.className = `badge-method badge-${rec.protocol === 'WS' ? 'WS' : rec.method}`;
+      bm.innerText = rec.protocol === 'WS' ? 'WS' : rec.method;
+
+      document.getElementById('detailStatus').innerText = `${rec.status} ${rec.status_text}`;
+      document.getElementById('detailStatus').className = `status-code status-${Math.floor(rec.status / 100)}xx`;
+      document.getElementById('detailUrl').innerText = rec.url;
+      document.getElementById('detailProto').innerText = rec.protocol;
+      document.getElementById('detailDuration').innerText = `${rec.duration_ms} ms`;
+      document.getElementById('detailClient').innerText = rec.client_addr;
+
+      const mockTag = document.getElementById('detailMock');
+      mockTag.style.display = rec.short_circuited ? 'inline-block' : 'none';
+
+      // Headers
+      renderHeaders('reqHeaderTable', rec.req_headers);
+      renderHeaders('resHeaderTable', rec.res_headers);
+
+      // Body formatting
+      document.getElementById('reqBodyBox').innerText = formatJsonIfPossible(rec.req_body);
+      document.getElementById('resBodyBox').innerText = formatJsonIfPossible(rec.res_body);
+
+      // WS Frames
+      const wsTab = document.getElementById('wsTabBtn');
+      if (rec.protocol === 'WS' || rec.ws_frames.length > 0) {
+        wsTab.style.display = 'block';
+        document.getElementById('wsFrameRows').innerHTML = rec.ws_frames.map(f => `
+          <tr>
+            <td>${f.time}</td>
+            <td class="${f.direction.includes('Client') ? 'ws-dir-c2s' : 'ws-dir-s2c'}">${f.direction}</td>
+            <td>${f.opcode}</td>
+            <td style="color: #A7F3D0;">${escapeHtml(f.payload)}</td>
+          </tr>
+        `).join('');
+      } else {
+        wsTab.style.display = 'none';
+      }
+    }
+
+    function renderHeaders(tableId, headers) {
+      const table = document.getElementById(tableId);
+      if (!headers || headers.length === 0) {
+        table.innerHTML = '<tr><td colspan="2" style="color: #6B7280;">(no headers)</td></tr>';
+        return;
+      }
+      table.innerHTML = headers.map(h => `
+        <tr>
+          <td class="header-key">${escapeHtml(h.name)}</td>
+          <td class="header-val">${escapeHtml(h.value)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.getElementById('tabRequest').style.display = 'none';
+      document.getElementById('tabResponse').style.display = 'none';
+      document.getElementById('tabWs').style.display = 'none';
+
+      if (name === 'request') {
+        document.querySelector('.tab:nth-child(1)').classList.add('active');
+        document.getElementById('tabRequest').style.display = 'block';
+      } else if (name === 'response') {
+        document.querySelector('.tab:nth-child(2)').classList.add('active');
+        document.getElementById('tabResponse').style.display = 'block';
+      } else if (name === 'ws') {
+        document.getElementById('wsTabBtn').classList.add('active');
+        document.getElementById('tabWs').style.display = 'block';
+      }
+    }
+
+    function formatJsonIfPossible(str) {
+      if (!str || str.trim() === '') return '(empty)';
+      try {
+        const obj = JSON.parse(str);
+        return JSON.stringify(obj, null, 2);
+      } catch (_) {
+        return str;
+      }
+    }
+
+    function escapeHtml(str) {
+      return (str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    connectSSE();
+    loadHistory();
+  </script>
+</body>
+</html>

@@ -1,11 +1,16 @@
-.PHONY: run build release check clean watch fmt lint test test-all kill-port publish publish-dry
+.PHONY: app run build release check clean watch fmt lint test test-all kill-ports publish publish-dry
 
 PORT := 8080
+UI_PORT := 8081
+UPSTREAM_PORT := 8082
 
-kill-port:
-	@lsof -ti :$(PORT) | xargs kill -9 2>/dev/null; true
+kill-ports:
+	@lsof -ti :$(PORT) -ti :$(UI_PORT) -ti :$(UPSTREAM_PORT) | xargs kill -9 2>/dev/null; true
 
-run: kill-port
+app: kill-ports
+	cargo run --example test_app --features decoder
+
+run: kill-ports
 	cargo run --example proxy
 
 build:

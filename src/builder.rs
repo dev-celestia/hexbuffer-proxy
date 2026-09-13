@@ -200,6 +200,11 @@ impl Proxy {
         Arc::clone(&self.enabled)
     }
 
+    /// Get a shared handle to the certificate authority.
+    pub fn ca(&self) -> Arc<CertificationAuthority> {
+        Arc::clone(&self.ca)
+    }
+
     /// Start the proxy on an existing pre-bound [`TcpListener`].
     ///
     /// Useful for testing with ephemeral ports (e.g. `127.0.0.1:0`)

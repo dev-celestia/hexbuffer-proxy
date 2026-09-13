@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,6 +17,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --all-targets --all-features
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --all-targets --all-features

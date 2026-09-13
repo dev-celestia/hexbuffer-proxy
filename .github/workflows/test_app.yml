@@ -1,0 +1,113 @@
+name: Test App CI
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-smoke-test:
+    name: Build & Smoke Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check test_app example
+        run: cargo check --example test_app --features decoder --verbose
+
+      - name: Clippy check test_app
+        run: cargo clippy --example test_app --features decoder -- -D warnings
+
+      - name: Build test_app binary
+        run: cargo build --example test_app --features decoder --verbose
+
+      - name: Smoke test test_app runtime
+        shell: bash
+        run: |
+          # Launch test_app in the background
+          cargo run --example test_app --features decoder &
+          APP_PID=$!
+
+          echo "Started test_app with PID $APP_PID, waiting for services to be ready..."
+          READY=false
+          for i in $(seq 1 30); do
+            if curl -s -f http://127.0.0.1:8081/api/status > /dev/null 2>&1; then
+              READY=true
+              echo "test_app dashboard is responding on port 8081!"
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$READY" != "true" ]; then
+            echo "Error: test_app failed to respond within 30 seconds"
+            kill $APP_PID 2>/dev/null || true
+            exit 1
+          fi
+
+          # 1. Verify Status API
+          STATUS_JSON=$(curl -s http://127.0.0.1:8081/api/status)
+          echo "Status response: $STATUS_JSON"
+          echo "$STATUS_JSON" | grep -q '"proxy_port":8080'
+          echo "$STATUS_JSON" | grep -q '"dashboard_port":8081'
+
+          # 2. Trigger Plain HTTP Test
+          HTTP_RES=$(curl -s -X POST http://127.0.0.1:8081/api/trigger/http)
+          echo "HTTP trigger response: $HTTP_RES"
+          echo "$HTTP_RES" | grep -q '"triggered":"http"'
+
+          # 3. Trigger Mock Short-Circuit Test
+          MOCK_RES=$(curl -s -X POST http://127.0.0.1:8081/api/trigger/mock)
+          echo "Mock trigger response: $MOCK_RES"
+          echo "$MOCK_RES" | grep -q '"triggered":"mock"'
+
+          # 4. Trigger WebSocket Test
+          WS_RES=$(curl -s -X POST http://127.0.0.1:8081/api/trigger/ws)
+          echo "WS trigger response: $WS_RES"
+          echo "$WS_RES" | grep -q '"triggered":"ws"'
+
+          # 5. Wait for traffic records to populate
+          sleep 2
+
+          # 6. Verify Traffic History was captured
+          HISTORY_JSON=$(curl -s http://127.0.0.1:8081/api/history)
+          RECORD_COUNT=$(echo "$HISTORY_JSON" | grep -o '"id":' | wc -l | tr -d ' ')
+          echo "Recorded traffic events count: $RECORD_COUNT"
+          if [ "$RECORD_COUNT" -lt 3 ]; then
+            echo "Error: expected at least 3 captured traffic records, got $RECORD_COUNT"
+            kill $APP_PID 2>/dev/null || true
+            exit 1
+          fi
+
+          # Gracefully stop test_app
+          kill $APP_PID 2>/dev/null || true
+          wait $APP_PID 2>/dev/null || true
+          echo "Smoke test passed successfully!"
+
+      - name: Upload Test App Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-app-${{ matrix.os }}
+          path: |
+            target/debug/examples/test_app
+            target/debug/examples/test_app.exe
+          if-no-files-found: ignore

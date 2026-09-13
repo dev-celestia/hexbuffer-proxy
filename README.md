@@ -44,10 +44,27 @@ Browser → hexbuffer-proxy (decrypts) → Upstream Server
 - **Rust** (stable, edition 2024)
 - The proxy CA certificate (`cert/ca.pem`) must be trusted by your system/browser for HTTPS interception to work without certificate warnings
 
+## Interactive Test Dashboard
+
+Test and inspect proxy traffic in real-time with zero configuration:
+
+```bash
+# Launch proxy (port 8080) + live web dashboard (port 8081) + mock upstream (port 8082)
+make app
+
+# Or with cargo
+cargo run --example test_app --features decoder
+```
+
+Open **http://127.0.0.1:8081** in your browser to:
+- 🚀 **Trigger built-in test requests** (Plain HTTP, Mock Short-Circuit, HTTPS MITM, WebSocket)
+- 🔍 **Inspect live traffic** (headers, decompressed JSON/text bodies, status codes, timing)
+- ⚡ **Toggle runtime interception** on/off with a single click
+
 ## Quick Start
 
 ```bash
-# Build and run the proxy example
+# Build and run the minimal CLI proxy example
 make run
 
 # Or manually
